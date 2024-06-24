@@ -1,0 +1,198 @@
+#!/bin/sh -e
+
+# kpqc-supercop version 20240507
+# SPDX-License-Identifier: LicenseRef-PD-hp OR CC0-1.0 OR 0BSD OR MIT-0 OR MIT
+
+supercop=supercop-20240425
+
+mkdir -p kpqc-supercop-build
+cd kpqc-supercop-build
+
+# ===== download and unpack supercop (if not already downloaded)
+
+[ -f unpacked-"$supercop".tar.bz2 ] || (
+  echo "downloading $supercop..."
+  curl -s -o "$supercop".tar.bz2 https://bench.cr.yp.to/supercop/"$supercop".tar.bz2
+  bunzip2 < "$supercop".tar.bz2 | tar -xf - "$supercop"
+  sed -i 's/-fomit-frame-pointer/-gdwarf-4 -Wall -Wextra/' "$supercop"/okcompilers/c "$supercop"/okcompilers/cpp
+  mv "$supercop".tar.bz2 unpacked-"$supercop".tar.bz2
+)
+
+# ===== download kpqc submissions (if not already downloaded)
+
+(
+  # for x in AIMer HAETAE MQ-Sign NCC-Sign NTRU+ Paloma REDOG SMAUG-T
+  for x in AIMer
+  do
+    [ -f complete-"$x".zip ] || [ -f unpacked-"$x".zip ] || (
+      echo "downloading $x..."
+      if [ "$x" = Paloma ] || [ "$x" = REDOG ]
+      then
+        curl -s -o partial-"$x".zip https://kpqc.or.kr/images/zip/"$x"_Implementation_package.zip
+      else
+        curl -s -o partial-"$x".zip https://kpqc.or.kr/images/zip/"$x"_Implementation_package_v2.zip
+      fi
+      mv partial-"$x".zip complete-"$x".zip
+    )
+  done
+)
+
+# ===== AIMer integration
+
+(
+  sourcetop='AIMer/240402_AIMer'
+  for p in 128f 128s 192f 192s 256f 256s
+  do
+    targettop="$supercop/crypto_sign/aimer$p"
+    mkdir -p "$targettop"
+    (
+      echo ref "$sourcetop"/Reference_Implementation
+      echo opt "$sourcetop"/Optimized_Implementation
+      echo aarch64 "$sourcetop"/Additional_Implementation/aarch64
+      echo aarch64_shake_opt "$sourcetop"/Additional_Implementation/aarch64_shake_opt
+      echo mem_opt "$sourcetop"/Additional_Implementation/mem_opt
+    ) |
+    while read target source
+    do
+      x="$targettop/$target"
+      [ -d "$x" ] && continue
+      mkdir -p "$x"
+      echo "integrating $x..."
+      cp -pr "$source"/aimer$p/* "$x"
+      cp -pr "$source"/aimer$p/common/* "$x"
+      echo '#include "randombytes.h"' > "$x/rng.h"
+      rm "$x/rng.c"
+      rm "$x/PQCgenKAT_sign.c"
+      rm "$x/cpucycles.c"
+      rm "$x/cpucycles.h"
+      rm "$x/speed_print.c"
+      rm "$x/speed_print.h"
+      rm -f "$x/crypto_declassify.h"
+      [ "$target" = "aarch64" ] && echo aarch64 > "$x/architectures"
+      [ "$target" = "aarch64_shake_opt" ] && echo aarch64 > "$x/architectures"
+      [ "$target" = "opt" ] && ( echo x86; echo amd64 ) > "$x/architectures"
+      [ "$target" = "opt" ] && cp "$source"/aimer$p/common/keccak4x/* "$x"
+      [ "$target" = "opt" ] && cp "$source"/aimer$p/common/keccak_avx2/* "$x"
+
+      sed -i '3a#include "crypto_sign.h"' "$x/sign.c"
+
+      sed -i 's/#define crypto_sign AIMER_NAMESPACE(crypto_sign)//' "$x/api.h"
+      sed -i 's/#define crypto_sign_open AIMER_NAMESPACE(crypto_sign_open)//' "$x/api.h"
+      sed -i 's/#define crypto_sign_keypair AIMER_NAMESPACE(crypto_sign_keypair)//' "$x/api.h"
+      sed -i 's/uint8_t/unsigned char/g' "$x/sign.h"
+      sed -i 's/uint8_t/unsigned char/g' "$x/sign.c"
+      sed -i 's/uint8_t/unsigned char/g' "$x/api.h"
+      sed -i 's/size_t/unsigned long long/g' "$x/sign.h"
+      sed -i 's/size_t/unsigned long long/g' "$x/sign.c"
+      sed -i 's/size_t/unsigned long long/g' "$x/api.h"
+      sed -i 's/#include "common\/crypto_declassify.h"/#include "crypto_declassify.h"/g' "$x/sign.c"
+
+      touch "$x/goal-constbranch"
+      touch "$x/goal-constindex"
+    done
+  done
+)
+
+# ===== running supercop
+
+(
+  [ -d "$supercop"/bench ] || (
+    cd "$supercop"
+    chmod +t crypto_*/*/cryptopp
+    chmod +t crypto_*/*/rust*
+    ./do-part init || :
+    ./do-part keccak || :
+    ./do-part crypto_hashblocks sha256 || :
+    ./do-part crypto_hashblocks sha512 || :
+    ./do-part crypto_hash sha256 || :
+    ./do-part crypto_hash sha384 || :
+    ./do-part crypto_hash sha512 || :
+    ./do-part crypto_hash sha3512 || :
+    ./do-part crypto_stream chacha20 || :
+    ./do-part crypto_rng chacha20 || :
+  )
+
+  (
+    echo crypto_sign aimer128f
+    echo crypto_sign aimer128s
+    echo crypto_sign aimer192f
+    echo crypto_sign aimer192s
+    echo crypto_sign aimer256f
+    echo crypto_sign aimer256s
+  ) |
+  while read o p
+  do
+    [ -f bench-"$p" ] || (
+      cd "$supercop"
+      ./do-part "$o" "$p" || :
+      cp bench/*/data ../bench-"$p"
+    )
+    [ -f timecop-"$p" ] || (
+      cd "$supercop"
+      env TIMECOP=1 ./do-part "$o" "$p" || :
+      cp bench/*/data ../timecop-"$p"
+    )
+    python3 -c '
+
+import sys
+
+o = sys.argv[1]
+p = sys.argv[2]
+
+pkbytes = None
+skbytes = None
+outputbytes = None
+ctbytes = None
+sigbytes = []
+keypair_cycles = []
+cycles = []
+open_cycles = []
+enc_cycles = []
+dec_cycles = []
+checksums = []
+tries = []
+
+for line in sys.stdin:
+  line = line.split()
+  if len(line) < 8: continue
+  if line[6] == "publickeybytes": pkbytes = line[7]
+  if line[6] == "secretkeybytes": skbytes = line[7]
+  if line[6] == "outputbytes": outputbytes = line[7]
+  if line[6] == "ciphertextbytes": ctbytes = line[7]
+  if line[6] == "bytes": sigbytes += [int(x)-int(line[7]) for x in line[9:]]
+  if line[6] == "keypair_cycles": keypair_cycles += [int(x) for x in line[9:]]
+  if line[6] == "cycles": cycles += [int(x) for x in line[9:]]
+  if line[6] == "open_cycles": open_cycles += [int(x) for x in line[9:]]
+  if line[6] == "enc_cycles": enc_cycles += [int(x) for x in line[9:]]
+  if line[6] == "dec_cycles": dec_cycles += [int(x) for x in line[9:]]
+  if line[6] == "try":
+    checksums += [line[7]]
+    tries += [(int(line[9]),line[12],line[13])]
+
+def statistics(x):
+  x = sorted(x)
+  if x == []: return None
+  if x[0] == x[-1]: return x[0]
+  median = x[len(x)//2] # XXX: handle even cases
+  q1 = x[len(x)//4] # XXX: handle other cases
+  q3 = x[(3*len(x))//4] # XXX: handle other cases
+  return f"{q1}...{median}...{q3}"
+
+if o == "crypto_kem":
+  print(p,"bytes","pk",pkbytes,"sk",skbytes,"ct",ctbytes,"shared",outputbytes)
+else:
+  print(p,"bytes","pk",pkbytes,"sk",skbytes,"sigbuf",outputbytes,"sig",statistics(sigbytes))
+print(p,"keypair",statistics(keypair_cycles))
+if o == "crypto_kem":
+  print(p,"enc",statistics(enc_cycles))
+  print(p,"dec",statistics(dec_cycles))
+else:
+  print(p,"sign",statistics(cycles))
+  print(p,"open",statistics(open_cycles))
+print(p,"checksums",statistics(checksums))
+for c,opi,compiler in sorted(tries):
+  print(p,"try",c,opi,compiler)
+
+' "$o" "$p" < bench-"$p" > report-"$p"
+  done
+)
