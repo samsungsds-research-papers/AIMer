@@ -1,10 +1,26 @@
 // SPDX-License-Identifier: MIT
 
-#include "tree.h"
-#include "hash.h"
-#include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+#include "tree.h"
+#include "hash.h"
+
+void expand_seed(const uint8_t seed[AIMER_SEED_SIZE],
+                 const uint8_t salt[AIMER_SALT_SIZE],
+                 const size_t rep_index,
+                 const size_t node_index,
+                 uint8_t out[2 * AIMER_SEED_SIZE])
+{
+  hash_instance ctx;
+
+  hash_init_prefix(&ctx, HASH_PREFIX_4);
+  hash_update(&ctx, salt, AIMER_SALT_SIZE);
+  hash_update(&ctx, (const uint8_t*)&rep_index, sizeof(uint8_t));
+  hash_update(&ctx, (const uint8_t*)&node_index, sizeof(uint8_t));
+  hash_update(&ctx, seed, AIMER_SEED_SIZE);
+  hash_final(&ctx);
+  hash_squeeze(&ctx, out, 2 * AIMER_SEED_SIZE);
+}
 
 //  Example of tree for [N = 8]
 //  x
@@ -13,21 +29,21 @@
 //  d = 2: 4   5     6     7
 //  d = 3: 8 9 10 11 12 13 14 15
 
-void expand_trees(uint8_t nodes[AIMER_T][2 * AIMER_N - 1][AIMER_SEED_SIZE],
-                  const uint8_t salt[AIMER_SALT_SIZE])
+void expand_trees(const uint8_t salt[AIMER_SALT_SIZE],
+                  uint8_t nodes[][2 * AIMER_NUM_MPC_PARTIES - 1][AIMER_SEED_SIZE])
 {
   uint8_t bufs[4][AIMER_SEED_SIZE + 2];
-  const uint8_t *in_ptrs[4] = {bufs[0], bufs[1], bufs[2], bufs[3]};
-  uint8_t *out_ptrs[4];
+  const uint8_t* in_ptrs[4] = {bufs[0], bufs[1], bufs[2], bufs[3]};
+  uint8_t* out_ptrs[4];
 
   hash_instance_x4 ctx, ctx_;
   hash_init_prefix_x4(&ctx_, HASH_PREFIX_4);
   hash_update_x4_1(&ctx_, salt, AIMER_SALT_SIZE);
 
   size_t rep, index, depth;
-  for (rep = 0; rep + 4 <= AIMER_T; rep += 4)
+  for (rep = 0; rep + 4 <= AIMER_NUM_REPETITIONS; rep += 4)
   {
-    for (index = 1; index < AIMER_N; index++)
+    for (index = 1; index < AIMER_NUM_MPC_PARTIES; index++)
     {
       memcpy(&ctx, &ctx_, sizeof(hash_instance_x4));
 
@@ -62,7 +78,7 @@ void expand_trees(uint8_t nodes[AIMER_T][2 * AIMER_N - 1][AIMER_SEED_SIZE],
   hash_init_prefix(&ctx1_, HASH_PREFIX_4);
   hash_update(&ctx1_, salt, AIMER_SALT_SIZE);
 
-  for (; rep < AIMER_T; rep++)
+  for (; rep < AIMER_NUM_REPETITIONS; rep++)
   {
     for (depth = 0; depth < 2; depth++)
     {
@@ -79,7 +95,7 @@ void expand_trees(uint8_t nodes[AIMER_T][2 * AIMER_N - 1][AIMER_SEED_SIZE],
       }
     }
     // depth = 2;
-    for (; depth < AIMER_LOGN; depth++)
+    for (; depth < AIMER_NUM_MPC_PARTIES_LOG2; depth++)
     {
       for (index = (1U << depth); index < (2U << depth); index += 4)
       {
@@ -114,12 +130,12 @@ void expand_trees(uint8_t nodes[AIMER_T][2 * AIMER_N - 1][AIMER_SEED_SIZE],
   }
 }
 
-void reveal_all_but(uint8_t reveal_path[AIMER_LOGN][AIMER_SEED_SIZE],
-                    const uint8_t nodes[2 * AIMER_N - 1][AIMER_SEED_SIZE],
-                    size_t cover_index)
+void reveal_all_but(const uint8_t nodes[2 * AIMER_NUM_MPC_PARTIES - 1][AIMER_SEED_SIZE],
+                    const size_t cover_index,
+                    uint8_t reveal_path[AIMER_NUM_MPC_PARTIES_LOG2][AIMER_SEED_SIZE])
 {
-  size_t index = cover_index + AIMER_N;
-  for (size_t depth = 0; depth < AIMER_LOGN; depth++)
+  size_t index = cover_index + AIMER_NUM_MPC_PARTIES;
+  for (size_t depth = 0; depth < AIMER_NUM_MPC_PARTIES_LOG2; depth++)
   {
     // index ^ 1 is sibling index
     memcpy(reveal_path[depth], nodes[(index ^ 1) - 1], AIMER_SEED_SIZE);
@@ -129,52 +145,45 @@ void reveal_all_but(uint8_t reveal_path[AIMER_LOGN][AIMER_SEED_SIZE],
   }
 }
 
-void reconstruct_tree(uint8_t nodes[2 * AIMER_N - 2][AIMER_SEED_SIZE],
-                      const uint8_t salt[AIMER_SALT_SIZE],
-                      const uint8_t reveal_path[AIMER_LOGN][AIMER_SEED_SIZE],
-                      size_t rep_index,
-                      size_t cover_index)
+void reconstruct_seed_tree(const uint8_t reveal_path[AIMER_NUM_MPC_PARTIES_LOG2][AIMER_SEED_SIZE],
+                           const size_t cover_index,
+                           const uint8_t salt[AIMER_SALT_SIZE],
+                           const size_t rep,
+                           uint8_t nodes[2 * AIMER_NUM_MPC_PARTIES - 2][AIMER_SEED_SIZE])
 {
-  size_t index, depth, path;
   uint8_t bufs[4][AIMER_SEED_SIZE + 2];
-  const uint8_t *in_ptrs[4] = {bufs[0], bufs[1], bufs[2], bufs[3]};
-  uint8_t *out_ptrs[4];
+  const uint8_t* in_ptrs[4] = {bufs[0], bufs[1], bufs[2], bufs[3]};
+  uint8_t* out_ptrs[4];
 
   hash_instance_x4 ctx, ctx_;
   hash_init_prefix_x4(&ctx_, HASH_PREFIX_4);
   hash_update_x4_1(&ctx_, salt, AIMER_SALT_SIZE);
 
-  // depth = 1
-  hash_instance ctx1;
-  uint8_t buffer[AIMER_SALT_SIZE + AIMER_SEED_SIZE + 3];
+  size_t index, depth, path;
 
-  hash_init(&ctx1);
-  path = ((cover_index + AIMER_N) >> (AIMER_LOGN - 1)) ^ 1;
+  // d = 1
+  path = ((cover_index + AIMER_NUM_MPC_PARTIES)
+           >> (AIMER_NUM_MPC_PARTIES_LOG2 - 1)) ^ 1;
 
-  buffer[0] = HASH_PREFIX_4;
-  memcpy(buffer + 1, salt, AIMER_SALT_SIZE);
-  buffer[AIMER_SALT_SIZE + 1] = rep_index;
-  buffer[AIMER_SALT_SIZE + 2] = path;
-  memcpy(buffer + AIMER_SALT_SIZE + 3, reveal_path[AIMER_LOGN - 1],
-         AIMER_SEED_SIZE);
+  expand_seed(reveal_path[AIMER_NUM_MPC_PARTIES_LOG2 - 1],
+              salt, rep, path, nodes[(path << 1) - 2]);
 
-  hash_update(&ctx1, buffer, AIMER_SALT_SIZE+ AIMER_SEED_SIZE + 3);
-  hash_final(&ctx1);
-  hash_squeeze(&ctx1, nodes[(path << 1) - 2], 2 * AIMER_SEED_SIZE);
-
-  for (depth = 2; depth < AIMER_LOGN; depth++)
+  for (depth = 2; depth < AIMER_NUM_MPC_PARTIES_LOG2; depth++)
   {
-    path = ((cover_index + AIMER_N) >> (AIMER_LOGN - depth)) ^ 1;
-    memcpy(nodes[path - 2], reveal_path[AIMER_LOGN - depth], AIMER_SEED_SIZE);
+    path = ((cover_index + AIMER_NUM_MPC_PARTIES)
+             >> (AIMER_NUM_MPC_PARTIES_LOG2 - depth)) ^ 1;
+
+    memcpy(nodes[path - 2], reveal_path[AIMER_NUM_MPC_PARTIES_LOG2 - depth],
+           AIMER_SEED_SIZE);
 
     for (index = (1U << depth); index < (2U << depth); index += 4)
     {
       memcpy(&ctx, &ctx_, sizeof(hash_instance_x4));
 
-      bufs[0][0] = (uint8_t)(rep_index);
-      bufs[1][0] = (uint8_t)(rep_index);
-      bufs[2][0] = (uint8_t)(rep_index);
-      bufs[3][0] = (uint8_t)(rep_index);
+      bufs[0][0] = (uint8_t)(rep);
+      bufs[1][0] = (uint8_t)(rep);
+      bufs[2][0] = (uint8_t)(rep);
+      bufs[3][0] = (uint8_t)(rep);
 
       bufs[0][1] = (uint8_t)(index + 0);
       bufs[1][1] = (uint8_t)(index + 1);
@@ -198,6 +207,9 @@ void reconstruct_tree(uint8_t nodes[2 * AIMER_N - 2][AIMER_SEED_SIZE],
     }
   }
 
-  path = ((cover_index + AIMER_N) >> (AIMER_LOGN - depth)) ^ 1;
-  memcpy(nodes[path - 2], reveal_path[AIMER_LOGN - depth], AIMER_SEED_SIZE);
+  path = ((cover_index + AIMER_NUM_MPC_PARTIES)
+          >> (AIMER_NUM_MPC_PARTIES_LOG2 - depth)) ^ 1;
+
+  memcpy(nodes[path - 2], reveal_path[AIMER_NUM_MPC_PARTIES_LOG2 - depth],
+          AIMER_SEED_SIZE);
 }

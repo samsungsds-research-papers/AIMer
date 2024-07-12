@@ -28,7 +28,7 @@ int main()
 
   uint8_t ct[32] = {0,};
 
-  aim2(ct, pt, iv);
+  aim2(pt, iv, ct);
 
   printf("PLAINTEXT                 : ");
   for (i = (int)sizeof(pt) - 1; i >= 0; i--)

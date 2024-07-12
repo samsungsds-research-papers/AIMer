@@ -3,37 +3,23 @@
 #ifndef FIELD_H
 #define FIELD_H
 
-#include "params.h"
-#include <stddef.h>
 #include <stdint.h>
+#include "params.h"
 
 typedef uint64_t GF[3];
 
-#define GF_set0 AIMER_NAMESPACE(GF_set0)
 void GF_set0(GF a);
-#define GF_copy AIMER_NAMESPACE(GF_copy)
-void GF_copy(GF out, const GF in);
-#define GF_to_bytes AIMER_NAMESPACE(GF_to_bytes)
-void GF_to_bytes(uint8_t *out, const GF in);
-#define GF_from_bytes AIMER_NAMESPACE(GF_from_bytes)
-void GF_from_bytes(GF out, const uint8_t *in);
+void GF_copy(const GF in, GF out);
+void GF_to_bytes(const GF in, uint8_t* out);
+void GF_from_bytes(const uint8_t* in, GF out);
 
-#define GF_add AIMER_NAMESPACE(GF_add)
-void GF_add(GF c, const GF a, const GF b);
-#define GF_mul AIMER_NAMESPACE(GF_mul)
-void GF_mul(GF c, const GF a, const GF b);
-#define GF_mul_add AIMER_NAMESPACE(GF_mul_add)
-void GF_mul_add(GF c, const GF a, const GF b);
-#define GF_transposed_matmul AIMER_NAMESPACE(GF_transposed_matmul)
-void GF_transposed_matmul(GF c, const GF a, const GF b[AIM2_NUM_BITS_FIELD]);
-#define GF_transposed_matmul_add AIMER_NAMESPACE(GF_transposed_matmul_add)
-void GF_transposed_matmul_add(GF c, const GF a, const GF b[AIM2_NUM_BITS_FIELD]);
-
-#define GF_mul_s AIMER_NAMESPACE(GF_mul_s)
-void GF_mul_s(GF c, const GF a, const GF b);
-#define GF_mul_add_s AIMER_NAMESPACE(GF_mul_add_s)
-void GF_mul_add_s(GF c, const GF a, const GF b);
-#define GF_sqr_s AIMER_NAMESPACE(GF_sqr_s)
-void GF_sqr_s(GF c, const GF a);
+void GF_add(const GF a, const GF b, GF c);
+void GF_mul(const GF a, const GF b, GF c);
+void GF_mul_add(const GF a, const GF b, GF c);
+void GF_sqr(const GF a, GF c);
+void GF_exp(const GF in, GF out, const uint64_t* exp);
+void GF_exp_power_of_2(const GF in, GF out, const unsigned exp_power_of_2);
+void GF_transposed_matmul(const GF a, const GF b[AIM2_NUM_BITS_FIELD], GF c);
+void GF_transposed_matmul_add(const GF a, const GF b[AIM2_NUM_BITS_FIELD], GF c);
 
 #endif // FIELD_H

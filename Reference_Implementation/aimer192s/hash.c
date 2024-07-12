@@ -1,41 +1,45 @@
 // SPDX-License-Identifier: MIT
 
-#include "hash.h"
-#include <stddef.h>
 #include <stdint.h>
+#include "hash.h"
+#include "portable_endian.h"
 
-void hash_init(hash_instance *ctx)
+void hash_init(hash_instance* ctx)
 {
-  shake256_inc_init(ctx);
+  Keccak_HashInitialize_SHAKE256(ctx);
 }
 
-void hash_init_prefix(hash_instance *ctx, uint8_t prefix)
+void hash_init_prefix(hash_instance* ctx, const uint8_t prefix)
 {
-  shake256_inc_init(ctx);
-  shake256_inc_absorb(ctx, &prefix, sizeof(prefix));
+  hash_init(ctx);
+  hash_update(ctx, &prefix, sizeof(prefix));
 }
 
-void hash_update(hash_instance *ctx, const uint8_t *data, size_t data_len)
+void hash_update(hash_instance* ctx, const uint8_t* data, size_t data_byte_len)
 {
-  shake256_inc_absorb(ctx, data, data_len);
+  Keccak_HashUpdate(ctx, data, data_byte_len << 3);
 }
 
-void hash_final(hash_instance *ctx)
+void hash_update_GF(hash_instance* ctx, const GF g)
 {
-  shake256_inc_finalize(ctx);
+  uint8_t buf[AIM2_NUM_BYTES_FIELD];
+  GF_to_bytes(g, buf);
+  hash_update(ctx, buf, AIM2_NUM_BYTES_FIELD);
 }
 
-void hash_squeeze(hash_instance *ctx, uint8_t *buffer, size_t buffer_len)
+void hash_final(hash_instance* ctx)
 {
-  shake256_inc_squeeze(buffer, buffer_len, ctx);
+  Keccak_HashFinal(ctx, NULL);
 }
 
-void hash_ctx_clone(hash_instance *ctx_dest, const hash_instance *ctx_src)
+void hash_squeeze(hash_instance* ctx, uint8_t* buffer, size_t buffer_len)
 {
-  shake256_inc_ctx_clone(ctx_dest, ctx_src);
+  Keccak_HashSqueeze(ctx, buffer, buffer_len << 3);
 }
 
-void hash_ctx_release(hash_instance *ctx)
+void hash_squeeze_GF(hash_instance* ctx, GF g)
 {
-  shake256_inc_ctx_release(ctx);
+  uint8_t buf[AIM2_NUM_BYTES_FIELD];
+  Keccak_HashSqueeze(ctx, buf, AIM2_NUM_BITS_FIELD);
+  GF_from_bytes(buf, g);
 }

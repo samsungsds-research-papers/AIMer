@@ -1,40 +1,65 @@
 // SPDX-License-Identifier: MIT
 
-#include "hash.h"
 #include <stdint.h>
+#include "hash.h"
+#include "portable_endian.h"
 
-void hash_init(hash_instance *ctx)
+void hash_init(hash_instance* ctx)
 {
-  shake256_inc_init(ctx);
+  Keccak_HashInitialize_SHAKE256(ctx);
 }
 
-void hash_init_prefix(hash_instance *ctx, uint8_t prefix)
+void hash_update(hash_instance* ctx, const uint8_t* data, size_t data_byte_len)
 {
-  shake256_inc_init(ctx);
-  shake256_inc_absorb(ctx, &prefix, sizeof(prefix));
+  Keccak_HashUpdate(ctx, data, data_byte_len << 3);
 }
 
-void hash_update(hash_instance *ctx, const uint8_t *data, size_t data_len)
+void hash_final(hash_instance* ctx)
 {
-  shake256_inc_absorb(ctx, data, data_len);
+  Keccak_HashFinal(ctx, NULL);
 }
 
-void hash_final(hash_instance *ctx)
+void hash_squeeze(hash_instance* ctx, uint8_t* buffer, size_t buffer_len)
 {
-  shake256_inc_finalize(ctx);
+  Keccak_HashSqueeze(ctx, buffer, buffer_len << 3);
 }
 
-void hash_squeeze(hash_instance *ctx, uint8_t *buffer, size_t buffer_len)
+void hash_init_prefix(hash_instance* ctx, const uint8_t prefix)
 {
-  shake256_inc_squeeze(buffer, buffer_len, ctx);
+  hash_init(ctx);
+  hash_update(ctx, &prefix, sizeof(prefix));
 }
 
-void hash_ctx_clone(hash_instance *ctx_dest, const hash_instance *ctx_src)
+// x4 parallel hashing
+void hash_init_x4(hash_instance_x4* ctx)
 {
-  shake256_inc_ctx_clone(ctx_dest, ctx_src);
+  Keccak_HashInitializetimes4_SHAKE256(ctx);
 }
 
-void hash_ctx_release(hash_instance *ctx)
+void hash_update_x4(hash_instance_x4* ctx, const uint8_t** data, size_t data_byte_len)
 {
-  shake256_inc_ctx_release(ctx);
+  Keccak_HashUpdatetimes4(ctx, data, data_byte_len << 3);
+}
+
+void hash_update_x4_1(hash_instance_x4* ctx, const uint8_t *data,
+                      size_t data_byte_len)
+{
+  const uint8_t* temp[4] = {data, data, data, data};
+  Keccak_HashUpdatetimes4(ctx, temp, data_byte_len << 3);
+}
+
+void hash_init_prefix_x4(hash_instance_x4* ctx, const uint8_t prefix)
+{
+  hash_init_x4(ctx);
+  hash_update_x4_1(ctx, &prefix, sizeof(prefix));
+}
+
+void hash_final_x4(hash_instance_x4* ctx)
+{
+  Keccak_HashFinaltimes4(ctx, NULL);
+}
+
+void hash_squeeze_x4(hash_instance_x4* ctx, uint8_t** buffer, size_t buffer_len)
+{
+  Keccak_HashSqueezetimes4(ctx, buffer, buffer_len << 3);
 }

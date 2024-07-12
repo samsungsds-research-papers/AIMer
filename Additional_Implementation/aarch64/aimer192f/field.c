@@ -1,49 +1,49 @@
 // SPDX-License-Identifier: MIT
 
-#include "field.h"
 #include <stddef.h>
+#include <string.h>
+#include "field.h"
+#include "portable_endian.h"
 
-void GF_to_bytes(uint8_t *out, const GF in)
+void GF_to_bytes(const GF in, uint8_t* out)
 {
-  int i, j;
-  for (i = 0; i < AIM2_NUM_WORDS_FIELD; i++)
-  {
-    uint64_t u = in[i];
-    for (j = 0; j < 8; j++)
-    {
-      *out++ = u;
-      u >>= 8;
-    }
-  }
+  uint64_t temp = htole64(in[0]);
+  size_t num_bytes = sizeof(uint64_t);
+
+  memcpy(out, (uint8_t*)(&temp), num_bytes);
+  temp = htole64(in[1]);
+  memcpy(out + num_bytes, (uint8_t*)(&temp), num_bytes);
+  temp = htole64(in[2]);
+  memcpy(out + 2 * num_bytes, (uint8_t*)(&temp), num_bytes);
 }
 
-void GF_from_bytes(GF out, const uint8_t *in)
+void GF_from_bytes(const uint8_t* in, GF out)
 {
-  int i, j;
-  for (i = 0; i < AIM2_NUM_WORDS_FIELD; i++)
-  {
-    uint64_t u = 0;
-    for (j = 7; j >= 0; j--)
-    {
-      u = (u << 8) | in[8 * i + j];
-    }
-    out[i] = u;
-  }
+  uint64_t temp;
+  size_t num_bytes = sizeof(uint64_t);
+
+  memcpy((uint8_t*)(&temp), in, num_bytes);
+  out[0] = le64toh(temp);
+  memcpy((uint8_t*)(&temp), in + num_bytes, num_bytes);
+  out[1] = le64toh(temp);
+  memcpy((uint8_t*)(&temp), in + 2 * num_bytes, num_bytes);
+  out[2] = le64toh(temp);
 }
 
-void GF_transposed_matmul(GF c, const GF a, const GF b[AIM2_NUM_BITS_FIELD])
+void GF_transposed_matmul(const GF a, const GF b[AIM2_NUM_BITS_FIELD], GF c)
 {
-  const uint64_t *a_ptr = a;
-  const GF *b_ptr = b;
+  unsigned int i, j;
+  const uint64_t* a_ptr = a;
+  const GF* b_ptr = b;
 
   uint64_t temp_c0 = 0;
   uint64_t temp_c1 = 0;
   uint64_t temp_c2 = 0;
   uint64_t mask;
-  for (size_t i = AIM2_NUM_WORDS_FIELD; i; --i, ++a_ptr)
+  for (i = AIM2_NUM_WORDS_FIELD; i; --i, ++a_ptr)
   {
     uint64_t index = *a_ptr;
-    for (size_t j = AIM2_NUM_BITS_WORD; j; j -= 4, index >>= 4, b_ptr += 4)
+    for (j = AIM2_NUM_BITS_WORD; j; j -= 4, index >>= 4, b_ptr += 4)
     {
       mask = -(index & 1);
       temp_c0 ^= (b_ptr[0][0] & mask);
@@ -71,10 +71,13 @@ void GF_transposed_matmul(GF c, const GF a, const GF b[AIM2_NUM_BITS_FIELD])
   c[2] = temp_c2;
 }
 
-void GF_transposed_matmul_add_N(GF c[AIMER_N], const GF a[AIMER_N],
-                                const GF b[AIM2_NUM_BITS_FIELD])
+void GF_transposed_matmul_add_N(const GF a[AIMER_NUM_MPC_PARTIES],
+                                const GF b[AIM2_NUM_BITS_FIELD],
+                                GF c[AIMER_NUM_MPC_PARTIES])
 {
-  for (size_t party = 0; party < AIMER_N; party++)
+  unsigned int i, j;
+
+  for (size_t party = 0; party < AIMER_NUM_MPC_PARTIES; party ++)
   {
     const uint64_t* a_ptr = a[party];
     const GF* b_ptr = b;
@@ -83,11 +86,10 @@ void GF_transposed_matmul_add_N(GF c[AIMER_N], const GF a[AIMER_N],
     uint64_t temp_c1 = 0;
     uint64_t temp_c2 = 0;
     uint64_t mask;
-    for (size_t i = AIM2_NUM_WORDS_FIELD; i; --i, ++a_ptr)
+    for (i = AIM2_NUM_WORDS_FIELD; i; --i, ++a_ptr)
     {
       uint64_t index = *a_ptr;
-
-      for (size_t j = AIM2_NUM_BITS_WORD; j; j -= 4, index >>= 4, b_ptr += 4)
+      for (j = AIM2_NUM_BITS_WORD; j; j -= 4, index >>= 4, b_ptr += 4)
       {
         mask = -(index & 1);
         temp_c0 ^= (b_ptr[0][0] & mask);

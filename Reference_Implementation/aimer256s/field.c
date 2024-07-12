@@ -1,62 +1,78 @@
 // SPDX-License-Identifier: MIT
 
 #include "field.h"
-#include <stddef.h>
-#include <stdint.h>
+#include "portable_endian.h"
 
-void GF_to_bytes(uint8_t *out, const GF in)
-{
-  int i, j;
-  for (i = 0; i < AIM2_NUM_WORDS_FIELD; i++)
-  {
-    uint64_t u = in[i];
-    for (j = 0; j < 8; j++)
-    {
-      *out++ = u;
-      u >>= 8;
-    }
-  }
-}
+// square the lower 32-bit of the input
+#define SQR_LOW(x) \
+  sqr_table[((x) >> 28) & 0xf] << 56 | sqr_table[((x) >> 24) & 0xf] << 48 | \
+  sqr_table[((x) >> 20) & 0xf] << 40 | sqr_table[((x) >> 16) & 0xf] << 32 | \
+  sqr_table[((x) >> 12) & 0xf] << 24 | sqr_table[((x) >>  8) & 0xf] << 16 | \
+  sqr_table[((x) >>  4) & 0xf] <<  8 | sqr_table[((x)      ) & 0xf]
 
-void GF_from_bytes(GF out, const uint8_t *in)
+// square the upper 32-bit of the input
+#define SQR_HIGH(x) \
+  sqr_table[((x) >> 60)      ] << 56 | sqr_table[((x) >> 56) & 0xf] << 48 | \
+  sqr_table[((x) >> 52) & 0xf] << 40 | sqr_table[((x) >> 48) & 0xf] << 32 | \
+  sqr_table[((x) >> 44) & 0xf] << 24 | sqr_table[((x) >> 40) & 0xf] << 16 | \
+  sqr_table[((x) >> 36) & 0xf] <<  8 | sqr_table[((x) >> 32) & 0xf]
+
+const uint64_t sqr_table[16] = {0x00, 0x01, 0x04, 0x05, 0x10, 0x11, 0x14, 0x15,
+                                0x40, 0x41, 0x44, 0x45, 0x50, 0x51, 0x54, 0x55};
+
+void poly64_mul(const uint64_t a, const uint64_t b, uint64_t *c1, uint64_t *c0);
+
+unsigned GF_getbit(const GF a, unsigned i)
 {
-  int i, j;
-  for (i = 0; i < AIM2_NUM_WORDS_FIELD; i++)
-  {
-    uint64_t u = 0;
-    for (j = 7; j >= 0; j--)
-    {
-      u = (u << 8) | in[8 * i + j];
-    }
-    out[i] = u;
-  }
+  return (a[i / AIM2_NUM_BITS_WORD] >> (i % AIM2_NUM_BITS_WORD)) & 1;
 }
 
 void GF_set0(GF a)
 {
-  a[0] = 0;
-  a[1] = 0;
-  a[2] = 0;
-  a[3] = 0;
+  for (unsigned i = 0; i < AIM2_NUM_WORDS_FIELD; i++)
+  {
+    a[i] = 0;
+  }
 }
 
-void GF_copy(GF out, const GF in)
+void GF_to_bytes(const GF in, uint8_t* out)
 {
-  out[0] = in[0];
-  out[1] = in[1];
-  out[2] = in[2];
-  out[3] = in[3];
+  uint64_t* temp = (uint64_t*)out;
+  for (unsigned i = 0; i < AIM2_NUM_WORDS_FIELD; i++)
+  {
+    temp[i] = htole64(in[i]);
+  }
 }
 
-void GF_add(GF c, const GF a, const GF b)
+void GF_from_bytes(const uint8_t* in, GF out)
 {
-  c[0] = a[0] ^ b[0];
-  c[1] = a[1] ^ b[1];
-  c[2] = a[2] ^ b[2];
-  c[3] = a[3] ^ b[3];
+  uint64_t* temp = (uint64_t*)in;
+  for (unsigned i = 0; i < AIM2_NUM_WORDS_FIELD; i++)
+  {
+    out[i] = le64toh(temp[i]);
+  }
 }
 
-static void poly64_mul(uint64_t *c1, uint64_t *c0, uint64_t a, uint64_t b)
+void GF_copy(const GF in, GF out)
+{
+  if (in == out)
+    return;
+
+  for (unsigned i = 0; i < AIM2_NUM_WORDS_FIELD; i++)
+  {
+    out[i] = in[i];
+  }
+}
+
+void GF_add(const GF a, const GF b, GF c)
+{
+  for (unsigned i = 0; i < AIM2_NUM_WORDS_FIELD; i++)
+  {
+    c[i] = a[i] ^ b[i];
+  }
+}
+
+void poly64_mul(const uint64_t a, const uint64_t b, uint64_t *c1, uint64_t *c0)
 {
   uint64_t table[16];
   uint64_t temp, mask, high, low;
@@ -143,20 +159,20 @@ static void poly64_mul(uint64_t *c1, uint64_t *c0, uint64_t a, uint64_t b)
   *c1 = high;
 }
 
-void GF_mul(GF c, const GF a, const GF b)
+void GF_mul(const GF a, const GF b, GF c)
 {
   uint64_t t[4] = {0,};
   uint64_t add[4] = {0,};
   uint64_t temp[8] = {0,};
 
-  poly64_mul(&t[0], &temp[0], a[0], b[0]);
-  poly64_mul(&t[2], &t[1], a[1], b[1]);
+  poly64_mul(a[0], b[0], &t[0], &temp[0]);
+  poly64_mul(a[1], b[1], &t[2], &t[1]);
   t[0] ^= t[1];
 
-  poly64_mul(&t[3], &t[1], a[2], b[2]);
+  poly64_mul(a[2], b[2], &t[3], &t[1]);
   t[1] ^= t[2];
 
-  poly64_mul(&temp[7], &t[2], a[3], b[3]);
+  poly64_mul(a[3], b[3], &temp[7], &t[2]);
   t[2] ^= t[3];
 
   temp[6] = temp[7] ^ t[2];
@@ -164,11 +180,11 @@ void GF_mul(GF c, const GF a, const GF b)
   temp[2] = t[1] ^ t[0];
   temp[1] = t[0] ^ temp[0];
 
-  poly64_mul(&t[1], &t[0], (a[0] ^ a[1]), (b[0] ^ b[1]));
+  poly64_mul((a[0] ^ a[1]), (b[0] ^ b[1]), &t[1], &t[0]);
   temp[1] ^= t[0];
   temp[2] ^= t[1];
 
-  poly64_mul(&t[1], &t[0], (a[2] ^ a[3]), (b[2] ^ b[3]));
+  poly64_mul((a[2] ^ a[3]), (b[2] ^ b[3]), &t[1], &t[0]);
   temp[3] ^= t[0];
   temp[6] ^= t[1];
 
@@ -181,8 +197,8 @@ void GF_mul(GF c, const GF a, const GF b)
   add[1] = a[1] ^ a[3];
   add[2] = b[0] ^ b[2];
   add[3] = b[1] ^ b[3];
-  poly64_mul(&t[1], &t[0], add[0], add[2]);
-  poly64_mul(&t[3], &t[2], add[1], add[3]);
+  poly64_mul(add[0], add[2], &t[1], &t[0]);
+  poly64_mul(add[1], add[3], &t[3], &t[2]);
   t[1] ^= t[2];
   t[2] = t[1] ^ t[3];
   t[1] ^= t[0];
@@ -192,7 +208,7 @@ void GF_mul(GF c, const GF a, const GF b)
   temp[4] ^= t[2];
   temp[5] ^= t[3];
 
-  poly64_mul(&t[1], &t[0], (add[0] ^ add[1]), (add[2] ^ add[3]));
+  poly64_mul((add[0] ^ add[1]), (add[2] ^ add[3]), &t[1], &t[0]);
   temp[3] ^= t[0];
   temp[4] ^= t[1];
 
@@ -219,20 +235,20 @@ void GF_mul(GF c, const GF a, const GF b)
   c[0] ^= (t[0] <<  2);
 }
 
-void GF_mul_add(GF c, const GF a, const GF b)
+void GF_mul_add(const GF a, const GF b, GF c)
 {
   uint64_t t[4] = {0,};
   uint64_t add[4] = {0,};
   uint64_t temp[8] = {0,};
 
-  poly64_mul(&t[0], &temp[0], a[0], b[0]);
-  poly64_mul(&t[2], &t[1], a[1], b[1]);
+  poly64_mul(a[0], b[0], &t[0], &temp[0]);
+  poly64_mul(a[1], b[1], &t[2], &t[1]);
   t[0] ^= t[1];
 
-  poly64_mul(&t[3], &t[1], a[2], b[2]);
+  poly64_mul(a[2], b[2], &t[3], &t[1]);
   t[1] ^= t[2];
 
-  poly64_mul(&temp[7], &t[2], a[3], b[3]);
+  poly64_mul(a[3], b[3], &temp[7], &t[2]);
   t[2] ^= t[3];
 
   temp[6] = temp[7] ^ t[2];
@@ -240,11 +256,11 @@ void GF_mul_add(GF c, const GF a, const GF b)
   temp[2] = t[1] ^ t[0];
   temp[1] = t[0] ^ temp[0];
 
-  poly64_mul(&t[1], &t[0], (a[0] ^ a[1]), (b[0] ^ b[1]));
+  poly64_mul((a[0] ^ a[1]), (b[0] ^ b[1]), &t[1], &t[0]);
   temp[1] ^= t[0];
   temp[2] ^= t[1];
 
-  poly64_mul(&t[1], &t[0], (a[2] ^ a[3]), (b[2] ^ b[3]));
+  poly64_mul((a[2] ^ a[3]), (b[2] ^ b[3]), &t[1], &t[0]);
   temp[3] ^= t[0];
   temp[6] ^= t[1];
 
@@ -257,8 +273,8 @@ void GF_mul_add(GF c, const GF a, const GF b)
   add[1] = a[1] ^ a[3];
   add[2] = b[0] ^ b[2];
   add[3] = b[1] ^ b[3];
-  poly64_mul(&t[1], &t[0], add[0], add[2]);
-  poly64_mul(&t[3], &t[2], add[1], add[3]);
+  poly64_mul(add[0], add[2], &t[1], &t[0]);
+  poly64_mul(add[1], add[3], &t[3], &t[2]);
   t[1] ^= t[2];
   t[2] = t[1] ^ t[3];
   t[1] ^= t[0];
@@ -268,7 +284,7 @@ void GF_mul_add(GF c, const GF a, const GF b)
   temp[4] ^= t[2];
   temp[5] ^= t[3];
 
-  poly64_mul(&t[1], &t[0], (add[0] ^ add[1]), (add[2] ^ add[3]));
+  poly64_mul((add[0] ^ add[1]), (add[2] ^ add[3]), &t[1], &t[0]);
   temp[3] ^= t[0];
   temp[4] ^= t[1];
 
@@ -295,468 +311,20 @@ void GF_mul_add(GF c, const GF a, const GF b)
   c[0] ^= (t[0] <<  2);
 }
 
-void GF_transposed_matmul(GF c, const GF a, const GF b[AIM2_NUM_BITS_FIELD])
-{
-  const uint64_t *a_ptr = a;
-  const GF *b_ptr = b;
-
-  uint64_t temp_c0 = 0;
-  uint64_t temp_c1 = 0;
-  uint64_t temp_c2 = 0;
-  uint64_t temp_c3 = 0;
-  uint64_t mask;
-  for (size_t i = AIM2_NUM_WORDS_FIELD; i; --i, ++a_ptr)
-  {
-    uint64_t index = *a_ptr;
-    for (size_t j = AIM2_NUM_BITS_WORD; j; j -= 4, index >>= 4, b_ptr += 4)
-    {
-      mask = -(index & 1);
-      temp_c0 ^= (b_ptr[0][0] & mask);
-      temp_c1 ^= (b_ptr[0][1] & mask);
-      temp_c2 ^= (b_ptr[0][2] & mask);
-      temp_c3 ^= (b_ptr[0][3] & mask);
-
-      mask = -((index >> 1) & 1);
-      temp_c0 ^= (b_ptr[1][0] & mask);
-      temp_c1 ^= (b_ptr[1][1] & mask);
-      temp_c2 ^= (b_ptr[1][2] & mask);
-      temp_c3 ^= (b_ptr[1][3] & mask);
-
-      mask = -((index >> 2) & 1);
-      temp_c0 ^= (b_ptr[2][0] & mask);
-      temp_c1 ^= (b_ptr[2][1] & mask);
-      temp_c2 ^= (b_ptr[2][2] & mask);
-      temp_c3 ^= (b_ptr[2][3] & mask);
-
-      mask = -((index >> 3) & 1);
-      temp_c0 ^= (b_ptr[3][0] & mask);
-      temp_c1 ^= (b_ptr[3][1] & mask);
-      temp_c2 ^= (b_ptr[3][2] & mask);
-      temp_c3 ^= (b_ptr[3][3] & mask);
-    }
-  }
-  c[0] = temp_c0;
-  c[1] = temp_c1;
-  c[2] = temp_c2;
-  c[3] = temp_c3;
-}
-
-void GF_transposed_matmul_add(GF c, const GF a, const GF b[AIM2_NUM_BITS_FIELD])
-{
-  const uint64_t *a_ptr = a;
-  const GF *b_ptr = b;
-
-  uint64_t temp_c0 = 0;
-  uint64_t temp_c1 = 0;
-  uint64_t temp_c2 = 0;
-  uint64_t temp_c3 = 0;
-  uint64_t mask;
-  for (size_t i = AIM2_NUM_WORDS_FIELD; i; --i, ++a_ptr)
-  {
-    uint64_t index = *a_ptr;
-    for (size_t j = AIM2_NUM_BITS_WORD; j; j -= 4, index >>= 4, b_ptr += 4)
-    {
-      mask = -(index & 1);
-      temp_c0 ^= (b_ptr[0][0] & mask);
-      temp_c1 ^= (b_ptr[0][1] & mask);
-      temp_c2 ^= (b_ptr[0][2] & mask);
-      temp_c3 ^= (b_ptr[0][3] & mask);
-
-      mask = -((index >> 1) & 1);
-      temp_c0 ^= (b_ptr[1][0] & mask);
-      temp_c1 ^= (b_ptr[1][1] & mask);
-      temp_c2 ^= (b_ptr[1][2] & mask);
-      temp_c3 ^= (b_ptr[1][3] & mask);
-
-      mask = -((index >> 2) & 1);
-      temp_c0 ^= (b_ptr[2][0] & mask);
-      temp_c1 ^= (b_ptr[2][1] & mask);
-      temp_c2 ^= (b_ptr[2][2] & mask);
-      temp_c3 ^= (b_ptr[2][3] & mask);
-
-      mask = -((index >> 3) & 1);
-      temp_c0 ^= (b_ptr[3][0] & mask);
-      temp_c1 ^= (b_ptr[3][1] & mask);
-      temp_c2 ^= (b_ptr[3][2] & mask);
-      temp_c3 ^= (b_ptr[3][3] & mask);
-    }
-  }
-  c[0] ^= temp_c0;
-  c[1] ^= temp_c1;
-  c[2] ^= temp_c2;
-  c[3] ^= temp_c3;
-}
-
-static void poly64_mul_s(uint64_t *z1, uint64_t *z0, uint64_t x0, uint64_t y0)
-{
-  const uint64_t C0 = 0x5555555555555555;
-  const uint64_t C1 = 0x3333333333333333;
-  const uint64_t C2 = 0x0f0f0f0f0f0f0f0f;
-  const uint64_t C3 = 0x00ff00ff00ff00ff;
-  const uint64_t C4 = 0x0000ffff0000ffff;
-  const uint64_t C5 = 0x00000000ffffffff;
-  uint64_t x1, x2, x3, x4, x5, x6, x7;
-  uint64_t y1, y2, y3, y4, y5, y6, y7;
-  uint64_t f0, f1, f2, f3, f4, f5, f6, f7;
-  uint64_t g0, g1, g2, g3, g4, g5, g6, g7;
-  uint64_t s, t;
-
-  x1 = x0 ^ (x0 >> 32); // will ignore outside C5
-  x2 = ((x0 ^ (x0 >> 16)) & C4) | ((x1 ^ (x1 << 16)) & (C4 << 16));
-  x3 = ((x0 ^ (x0 >> 8)) & C3) | ((x1 ^ (x1 <<  8)) & (C3 <<  8));
-  x4 = x2 ^ (x2 >> 8);  // will ignore outside C3
-  x5 = ((x0 ^ (x0 >> 4)) & C2) | ((x1 ^ (x1 <<  4)) & (C2 <<  4));
-  x6 = ((x2 ^ (x2 >> 4)) & C2) | ((x3 ^ (x3 <<  4)) & (C2 <<  4));
-  x7 = x4 ^ (x4 >> 4);  // will ignore outside C2
-  s = ((x0 >> 2) ^ x2) & C1;
-  x0 ^= s << 2;
-  x2 ^= s;
-  s = ((x1 >> 2) ^ x3) & C1;
-  x1 ^= s << 2;
-  x3 ^= s;
-  s = ((x4 >> 2) ^ x6) & C1;
-  x4 ^= s << 2;
-  x6 ^= s;
-  s = ((x5 >> 2) ^ x7) & C1;
-  x5 ^= s << 2;
-  x7 ^= s;
-  s = ((x0 >> 1) ^ x1) & C0;
-  x0 ^= s << 1;
-  x1 ^= s;
-  s = ((x2 >> 1) ^ x3) & C0;
-  x2 ^= s << 1;
-  x3 ^= s;
-  s = ((x4 >> 1) ^ x5) & C0;
-  x4 ^= s << 1;
-  x5 ^= s;
-  s = ((x6 >> 1) ^ x7) & C0;
-  x6 ^= s << 1;
-  x7 ^= s;
-
-  y1 = y0 ^ (y0 >> 32);
-  y2 = ((y0 ^ (y0 >> 16)) & C4) | ((y1 ^ (y1 << 16)) & (C4 << 16));
-  y3 = ((y0 ^ (y0 >> 8)) & C3) | ((y1 ^ (y1 << 8)) & (C3 << 8));
-  y4 = y2 ^ (y2 >> 8);
-  y5 = ((y0 ^ (y0 >> 4)) & C2) | ((y1 ^ (y1 << 4)) & (C2 << 4));
-  y6 = ((y2 ^ (y2 >> 4)) & C2) | ((y3 ^ (y3 << 4)) & (C2 << 4));
-  y7 = y4 ^ (y4 >> 4);
-  s = ((y0 >> 2) ^ y2) & C1;
-  y0 ^= s << 2;
-  y2 ^= s;
-  s = ((y1 >> 2) ^ y3) & C1;
-  y1 ^= s << 2;
-  y3 ^= s;
-  s = ((y4 >> 2) ^ y6) & C1;
-  y4 ^= s << 2;
-  y6 ^= s;
-  s = ((y5 >> 2) ^ y7) & C1;
-  y5 ^= s << 2;
-  y7 ^= s;
-  s = ((y0 >> 1) ^ y1) & C0;
-  y0 ^= s << 1;
-  y1 ^= s;
-  s = ((y2 >> 1) ^ y3) & C0;
-  y2 ^= s << 1;
-  y3 ^= s;
-  s = ((y4 >> 1) ^ y5) & C0;
-  y4 ^= s << 1;
-  y5 ^= s;
-  s = ((y6 >> 1) ^ y7) & C0;
-  y6 ^= s << 1;
-  y7 ^= s;
-
-  f0 = x0 & y0;
-  f1 = (x0 & y1) ^ (x1 & y0);
-  f2 = (x0 & y2) ^ (x1 & y1) ^ (x2 & y0);
-  f3 = (x0 & y3) ^ (x1 & y2) ^ (x2 & y1) ^ (x3 & y0);
-  g0 = (x1 & y3) ^ (x2 & y2) ^ (x3 & y1);
-  g1 = (x2 & y3) ^ (x3 & y2);
-  g2 = x3 & y3;
-
-  f4 = x4 & y4;
-  f5 = (x4 & y5) ^ (x5 & y4);
-  f6 = (x4 & y6) ^ (x5 & y5) ^ (x6 & y4);
-  f7 = (x4 & y7) ^ (x5 & y6) ^ (x6 & y5) ^ (x7 & y4);
-  g4 = (x5 & y7) ^ (x6 & y6) ^ (x7 & y5);
-  g5 = (x6 & y7) ^ (x7 & y6);
-  g6 = x7 & y7;
-
-  s = ((f0 >> 1) ^ f1) & C0;
-  f0 ^= s << 1;
-  f1 ^= s;
-  s = ((f2 >> 1) ^ f3) & C0;
-  f2 ^= s << 1;
-  f3 ^= s;
-  s = ((f0 >> 2) ^ f2) & C1;
-  f0 ^= s << 2;
-  f2 ^= s;
-  s = ((f1 >> 2) ^ f3) & C1;
-  f1 ^= s << 2;
-  f3 ^= s;
-  s = ((g0 >> 1) ^ g1) & C0;
-  g0 ^= s << 1;
-  g1 ^= s;
-  s = (g2 >> 1) & C0;
-  g2 ^= s << 1;
-  g3 = s;
-  s = ((g0 >> 2) ^ g2) & C1;
-  g0 ^= s << 2;
-  g2 ^= s;
-  s = ((g1 >> 2) ^ g3) & C1;
-  g1 ^= s << 2;
-  g3 ^= s;
-
-  s = ((f4 >> 1) ^ f5) & C0;
-  f4 ^= s << 1;
-  f5 ^= s;
-  s = ((f6 >> 1) ^ f7) & C0;
-  f6 ^= s << 1;
-  f7 ^= s;
-  s = ((f4 >> 2) ^ f6) & C1;
-  f4 ^= s << 2;
-  f6 ^= s;
-  s = ((f5 >> 2) ^ f7) & C1;
-  f5 ^= s << 2;
-  f7 ^= s;
-  s = ((g4 >> 1) ^ g5) & C0;
-  g4 ^= s << 1;
-  g5 ^= s;
-  s = (g6 >> 1) & C0;
-  g6 ^= s << 1;
-  g7 = s;
-  s = ((g4 >> 2) ^ g6) & C1;
-  g4 ^= s << 2;
-  g6 ^= s;
-  s = ((g5 >> 2) ^ g7) & C1;
-  g5 ^= s << 2;
-  g7 ^= s;
-
-  t = f0 ^ g0;
-  f0 ^= ((f5 ^ t) & C2) << 4;
-  g0 ^= (g5 ^ (t >> 4)) & C2;
-  t = f1 ^ g1;
-  f1 ^= (f5 ^ (t << 4)) & (C2 << 4);
-  g1 ^= ((g5 ^ t) >> 4) & C2;
-  t = f2 ^ g2;
-  f2 ^= ((f6 ^ t) & C2) << 4;
-  g2 ^= (g6 ^ (t >> 4)) & C2;
-  t = f3 ^ g3;
-  f3 ^= (f6 ^ (t << 4)) & (C2 << 4);
-  g3 ^= ((g6 ^ t) >> 4) & C2;
-  t = f4 ^ g4;
-  f4 ^= ((f7 ^ t) & C2) << 4;
-  g4 ^= (g7 ^ (t >> 4)) & C2;
-
-  t = f0 ^ g0;
-  f0 ^= ((f3 ^ t) & C3) << 8;
-  g0 ^= (g3 ^ (t >> 8)) & C3;
-  t = f1 ^ g1;
-  f1 ^= (f3 ^ (t << 8)) & (C3 << 8);
-  g1 ^= ((g3 ^ t) >> 8) & C3;
-  t = f2 ^ g2;
-  f2 ^= ((f4 ^ t) & C3) << 8;
-  g2 ^= (g4 ^ (t >> 8)) & C3;
-
-  t = f0 ^ g0;
-  f0 ^= ((f2 ^ t) & C4) << 16;
-  g0 ^= (g2 ^ (t >> 16)) & C4;
-  t = f1 ^ g1;
-  f1 ^= (f2 ^ (t << 16)) & (C4 << 16);
-  g1 ^= ((g2 ^ t) >> 16) & C4;
-
-  t = f0 ^ g0;
-  f0 ^= ((t ^ f1) & C5) << 32;
-  g0 ^= ((t >> 32) ^ g1) & C5;
-
-  *z0 = f0;
-  *z1 = g0;
-}
-
-void GF_mul_s(GF c, const GF a, const GF b)
-{
-  uint64_t t[4] = {0,};
-  uint64_t add[4] = {0,};
-  uint64_t temp[8] = {0,};
-
-  poly64_mul_s(&t[0], &temp[0], a[0], b[0]);
-  poly64_mul_s(&t[2], &t[1], a[1], b[1]);
-  t[0] ^= t[1];
-
-  poly64_mul_s(&t[3], &t[1], a[2], b[2]);
-  t[1] ^= t[2];
-
-  poly64_mul_s(&temp[7], &t[2], a[3], b[3]);
-  t[2] ^= t[3];
-
-  temp[6] = temp[7] ^ t[2];
-  temp[3] = t[2] ^ t[1];
-  temp[2] = t[1] ^ t[0];
-  temp[1] = t[0] ^ temp[0];
-
-  poly64_mul_s(&t[1], &t[0], (a[0] ^ a[1]), (b[0] ^ b[1]));
-  temp[1] ^= t[0];
-  temp[2] ^= t[1];
-
-  poly64_mul_s(&t[1], &t[0], (a[2] ^ a[3]), (b[2] ^ b[3]));
-  temp[3] ^= t[0];
-  temp[6] ^= t[1];
-
-  temp[5] = temp[7] ^ temp[3];
-  temp[4] = temp[6] ^ temp[2];
-  temp[3] ^= temp[1];
-  temp[2] ^= temp[0];
-
-  add[0] = a[0] ^ a[2];
-  add[1] = a[1] ^ a[3];
-  add[2] = b[0] ^ b[2];
-  add[3] = b[1] ^ b[3];
-  poly64_mul_s(&t[1], &t[0], add[0], add[2]);
-  poly64_mul_s(&t[3], &t[2], add[1], add[3]);
-  t[1] ^= t[2];
-  t[2] = t[1] ^ t[3];
-  t[1] ^= t[0];
-
-  temp[2] ^= t[0];
-  temp[3] ^= t[1];
-  temp[4] ^= t[2];
-  temp[5] ^= t[3];
-
-  poly64_mul_s(&t[1], &t[0], (add[0] ^ add[1]), (add[2] ^ add[3]));
-  temp[3] ^= t[0];
-  temp[4] ^= t[1];
-
-  t[0] = temp[4] ^ ((temp[7] >> 54) ^ (temp[7] >> 59) ^ (temp[7] >> 62));
-
-  c[3] = temp[3] ^ temp[7];
-  c[3] ^= (temp[7] << 10) | (temp[6] >> 54);
-  c[3] ^= (temp[7] <<  5) | (temp[6] >> 59);
-  c[3] ^= (temp[7] <<  2) | (temp[6] >> 62);
-
-  c[2] = temp[2] ^ temp[6];
-  c[2] ^= (temp[6] << 10) | (temp[5] >> 54);
-  c[2] ^= (temp[6] <<  5) | (temp[5] >> 59);
-  c[2] ^= (temp[6] <<  2) | (temp[5] >> 62);
-
-  c[1] = temp[1] ^ temp[5];
-  c[1] ^= (temp[5] << 10) | (t[0] >> 54);
-  c[1] ^= (temp[5] <<  5) | (t[0] >> 59);
-  c[1] ^= (temp[5] <<  2) | (t[0] >> 62);
-
-  c[0] = temp[0] ^ t[0];
-  c[0] ^= (t[0] << 10);
-  c[0] ^= (t[0] <<  5);
-  c[0] ^= (t[0] <<  2);
-}
-
-void GF_mul_add_s(GF c, const GF a, const GF b)
-{
-  uint64_t t[4] = {0,};
-  uint64_t add[4] = {0,};
-  uint64_t temp[8] = {0,};
-
-  poly64_mul_s(&t[0], &temp[0], a[0], b[0]);
-  poly64_mul_s(&t[2], &t[1], a[1], b[1]);
-  t[0] ^= t[1];
-
-  poly64_mul_s(&t[3], &t[1], a[2], b[2]);
-  t[1] ^= t[2];
-
-  poly64_mul_s(&temp[7], &t[2], a[3], b[3]);
-  t[2] ^= t[3];
-
-  temp[6] = temp[7] ^ t[2];
-  temp[3] = t[2] ^ t[1];
-  temp[2] = t[1] ^ t[0];
-  temp[1] = t[0] ^ temp[0];
-
-  poly64_mul_s(&t[1], &t[0], (a[0] ^ a[1]), (b[0] ^ b[1]));
-  temp[1] ^= t[0];
-  temp[2] ^= t[1];
-
-  poly64_mul_s(&t[1], &t[0], (a[2] ^ a[3]), (b[2] ^ b[3]));
-  temp[3] ^= t[0];
-  temp[6] ^= t[1];
-
-  temp[5] = temp[7] ^ temp[3];
-  temp[4] = temp[6] ^ temp[2];
-  temp[3] ^= temp[1];
-  temp[2] ^= temp[0];
-
-  add[0] = a[0] ^ a[2];
-  add[1] = a[1] ^ a[3];
-  add[2] = b[0] ^ b[2];
-  add[3] = b[1] ^ b[3];
-  poly64_mul_s(&t[1], &t[0], add[0], add[2]);
-  poly64_mul_s(&t[3], &t[2], add[1], add[3]);
-  t[1] ^= t[2];
-  t[2] = t[1] ^ t[3];
-  t[1] ^= t[0];
-
-  temp[2] ^= t[0];
-  temp[3] ^= t[1];
-  temp[4] ^= t[2];
-  temp[5] ^= t[3];
-
-  poly64_mul_s(&t[1], &t[0], (add[0] ^ add[1]), (add[2] ^ add[3]));
-  temp[3] ^= t[0];
-  temp[4] ^= t[1];
-
-  t[0] = temp[4] ^ ((temp[7] >> 54) ^ (temp[7] >> 59) ^ (temp[7] >> 62));
-
-  c[3] ^= temp[3] ^ temp[7];
-  c[3] ^= (temp[7] << 10) | (temp[6] >> 54);
-  c[3] ^= (temp[7] <<  5) | (temp[6] >> 59);
-  c[3] ^= (temp[7] <<  2) | (temp[6] >> 62);
-
-  c[2] ^= temp[2] ^ temp[6];
-  c[2] ^= (temp[6] << 10) | (temp[5] >> 54);
-  c[2] ^= (temp[6] <<  5) | (temp[5] >> 59);
-  c[2] ^= (temp[6] <<  2) | (temp[5] >> 62);
-
-  c[1] ^= temp[1] ^ temp[5];
-  c[1] ^= (temp[5] << 10) | (t[0] >> 54);
-  c[1] ^= (temp[5] <<  5) | (t[0] >> 59);
-  c[1] ^= (temp[5] <<  2) | (t[0] >> 62);
-
-  c[0] ^= temp[0] ^ t[0];
-  c[0] ^= (t[0] << 10);
-  c[0] ^= (t[0] <<  5);
-  c[0] ^= (t[0] <<  2);
-}
-
-static void poly64_sqr_s(uint64_t *z1, uint64_t *z0, uint64_t x)
-{
-  const uint64_t C0 = 0x5555555555555555;
-  const uint64_t C1 = 0x3333333333333333;
-  const uint64_t C2 = 0x0f0f0f0f0f0f0f0f;
-  const uint64_t C3 = 0x00ff00ff00ff00ff;
-  const uint64_t C4 = 0x0000ffff0000ffff;
-  const uint64_t C5 = 0x00000000ffffffff;
-  uint64_t y = x >> 32;
-  x &= C5;
-  x = (x | (x << 16)) & C4;
-  y = (y | (y << 16)) & C4;
-  x = (x | (x << 8)) & C3;
-  y = (y | (y << 8)) & C3;
-  x = (x | (x << 4)) & C2;
-  y = (y | (y << 4)) & C2;
-  x = (x | (x << 2)) & C1;
-  y = (y | (y << 2)) & C1;
-  x = (x | (x << 1)) & C0;
-  y = (y | (y << 1)) & C0;
-  *z0 = x;
-  *z1 = y;
-}
-
-void GF_sqr_s(GF c, const GF a)
+void GF_sqr(const GF a, GF c)
 {
   uint64_t t = 0;
   uint64_t temp[8] = {0,};
 
-  poly64_sqr_s(&temp[1], &temp[0], a[0]);
-  poly64_sqr_s(&temp[3], &temp[2], a[1]);
-  poly64_sqr_s(&temp[5], &temp[4], a[2]);
-  poly64_sqr_s(&temp[7], &temp[6], a[3]);
+  temp[0] = SQR_LOW(a[0]);
+  temp[1] = SQR_HIGH(a[0]);
+  temp[2] = SQR_LOW(a[1]);
+  temp[3] = SQR_HIGH(a[1]);
+
+  temp[4] = SQR_LOW(a[2]);
+  temp[5] = SQR_HIGH(a[2]);
+  temp[6] = SQR_LOW(a[3]);
+  temp[7] = SQR_HIGH(a[3]);
 
   t = temp[4] ^ ((temp[7] >> 54) ^ (temp[7] >> 59) ^ (temp[7] >> 62));
 
@@ -779,4 +347,56 @@ void GF_sqr_s(GF c, const GF a)
   c[0] ^= (t << 10);
   c[0] ^= (t <<  5);
   c[0] ^= (t <<  2);
+}
+
+void GF_exp(const GF in, GF out, const uint64_t* exp)
+{
+  GF in_;
+  GF_copy(in, in_);
+  GF_set0(out);
+  out[0] = 1;
+  for (unsigned i = 0; i < AIM2_NUM_WORDS_FIELD; i++)
+  {
+    uint64_t e = exp[i];
+    for (unsigned j = 0; j < AIM2_NUM_BITS_WORD; j++, e >>= 1)
+    {
+      if (e & 1)
+      {
+        GF_mul(out, in_, out);
+      }
+      GF_sqr(in_, in_);
+    }
+  }
+}
+
+void GF_exp_power_of_2(const GF in, GF out, const unsigned exp_power_of_2)
+{
+  GF_copy(in, out);
+  for (unsigned i = 0; i < exp_power_of_2; i++)
+  {
+    GF_sqr(out, out);
+  }
+}
+
+// c = sum_i a[i] * b[i]
+void GF_transposed_matmul(const GF a, const GF b[AIM2_NUM_BITS_FIELD], GF c)
+{
+  GF tmp;
+  GF_set0(tmp);
+  GF_transposed_matmul_add(a, b, tmp);
+  GF_copy(tmp, c);
+}
+
+// c += sum_i a[i] * b[i]
+void GF_transposed_matmul_add(const GF a, const GF b[AIM2_NUM_BITS_FIELD], GF c)
+{
+  GF a_;
+  GF_copy(a, a_);
+  for (unsigned i = 0; i < AIM2_NUM_BITS_FIELD; i++)
+  {
+    if (GF_getbit(a_, i))
+    {
+      GF_add(c, b[i], c);
+    }
+  }
 }

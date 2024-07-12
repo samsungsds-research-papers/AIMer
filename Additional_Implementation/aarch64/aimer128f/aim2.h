@@ -3,9 +3,9 @@
 #ifndef AIM2_H
 #define AIM2_H
 
+#include <stdint.h>
 #include "field.h"
 #include "params.h"
-#include <stdint.h>
 
 static const GF aim2_constants[AIM2_NUM_INPUT_SBOX] =
 {
@@ -277,31 +277,17 @@ static const GF aim2_e2_power_matrix[AIM2_NUM_BITS_FIELD] =
   {0xbb40cef8e0e85cea, 0xd8b3a76799622f49},
 };
 
-#define GF_exp_invmer_e_1 AIMER_NAMESPACE(GF_exp_invmer_e_1)
-void GF_exp_invmer_e_1(GF out, const GF in);
-#define GF_exp_invmer_e_2 AIMER_NAMESPACE(GF_exp_invmer_e_2)
-void GF_exp_invmer_e_2(GF out, const GF in);
-#define GF_exp_mer_e_star AIMER_NAMESPACE(GF_exp_mer_e_star)
-void GF_exp_mer_e_star(GF out, const GF in);
+void generate_matrices_L_and_U(const uint8_t iv[AIM2_IV_SIZE],
+                               GF matrix_L[AIM2_NUM_INPUT_SBOX][AIM2_NUM_BITS_FIELD],
+                               GF matrix_U[AIM2_NUM_INPUT_SBOX][AIM2_NUM_BITS_FIELD],
+                               GF vector_b);
+void generate_matrix_LU(const uint8_t iv[AIM2_IV_SIZE],
+                        GF matrix_A[AIM2_NUM_INPUT_SBOX][AIM2_NUM_BITS_FIELD],
+                        GF vector_b);
 
-#define generate_matrices_L_and_U AIMER_NAMESPACE(generate_matrices_L_and_U)
-void generate_matrices_L_and_U(
-        GF matrix_L[AIM2_NUM_INPUT_SBOX][AIM2_NUM_BITS_FIELD],
-        GF matrix_U[AIM2_NUM_INPUT_SBOX][AIM2_NUM_BITS_FIELD],
-        GF vector_b,
-        const uint8_t iv[AIM2_IV_SIZE]);
-
-#define generate_matrix_LU AIMER_NAMESPACE(generate_matrix_LU)
-void generate_matrix_LU(GF matrix_A[AIM2_NUM_INPUT_SBOX][AIM2_NUM_BITS_FIELD],
-                        GF vector_b,
-                        const uint8_t iv[AIM2_IV_SIZE]);
-
-#define aim2_sbox_outputs AIMER_NAMESPACE(aim2_sbox_outputs)
-void aim2_sbox_outputs(GF sbox_outputs[AIM2_NUM_INPUT_SBOX], const GF pt);
-
-#define aim2 AIMER_NAMESPACE(aim2)
-void aim2(uint8_t ct[AIM2_NUM_BYTES_FIELD],
-          const uint8_t pt[AIM2_NUM_BYTES_FIELD],
-          const uint8_t iv[AIM2_IV_SIZE]);
+void aim2_sbox_outputs(const GF pt, GF sbox_outputs[AIM2_NUM_INPUT_SBOX]);
+void aim2(const uint8_t pt[AIM2_NUM_BYTES_FIELD],
+          const uint8_t iv[AIM2_IV_SIZE],
+          uint8_t ct[AIM2_NUM_BYTES_FIELD]);
 
 #endif // AIM2_H

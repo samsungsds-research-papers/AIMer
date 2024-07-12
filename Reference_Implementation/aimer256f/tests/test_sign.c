@@ -5,7 +5,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include "../api.h"
-#include "../common/rng.h"
+#include "../rng.h"
 
 #define MLEN 59
 #define NTESTS 5
@@ -13,7 +13,7 @@
 int main(void)
 {
   size_t i, j;
-  size_t mlen, smlen;
+  unsigned long long mlen, smlen;
   uint8_t b;
   uint8_t m[MLEN + CRYPTO_BYTES];
   uint8_t m2[MLEN + CRYPTO_BYTES];

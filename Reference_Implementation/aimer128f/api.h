@@ -9,36 +9,23 @@ You are solely responsible for determining the appropriateness of using and dist
 #ifndef API_H
 #define API_H
 
-#include "params.h"
-#include <stddef.h>
-#include <stdint.h>
+#define CRYPTO_SECRETKEYBYTES   48
+#define CRYPTO_PUBLICKEYBYTES   32
+#define CRYPTO_BYTES            5888
 
-#define CRYPTO_PUBLICKEYBYTES 32
-#define CRYPTO_SECRETKEYBYTES 48
-#define CRYPTO_BYTES 5888
 #define CRYPTO_ALGNAME "aimer128f"
 
-#define crypto_sign_keypair AIMER_NAMESPACE(crypto_sign_keypair)
-int crypto_sign_keypair(uint8_t *pk, uint8_t *sk);
+int
+crypto_sign_keypair(unsigned char *pk, unsigned char *sk);
 
-#define crypto_sign_signature AIMER_NAMESPACE(crypto_sign_signature)
-int crypto_sign_signature(uint8_t *sig, size_t *siglen,
-        const uint8_t *m, size_t mlen,
-        const uint8_t *sk);
+int
+crypto_sign(unsigned char *sm, unsigned long long *smlen,
+            const unsigned char *m, unsigned long long mlen,
+            const unsigned char *sk);
 
-#define crypto_sign AIMER_NAMESPACE(crypto_sign)
-int crypto_sign(uint8_t *sm, size_t *smlen,
-        const uint8_t *m, size_t mlen,
-        const uint8_t *sk);
+int
+crypto_sign_open(unsigned char *m, unsigned long long *mlen,
+                 const unsigned char *sm, unsigned long long smlen,
+                 const unsigned char *pk);
 
-#define crypto_sign_verify AIMER_NAMESPACE(crypto_sign_verify)
-int crypto_sign_verify(const uint8_t *sig, size_t siglen,
-        const uint8_t *m, size_t mlen,
-        const uint8_t *pk);
-
-#define crypto_sign_open AIMER_NAMESPACE(crypto_sign_open)
-int crypto_sign_open(uint8_t *m, size_t *mlen,
-        const uint8_t *sm, size_t smlen,
-        const uint8_t *pk);
-
-#endif
+#endif /* API_H */

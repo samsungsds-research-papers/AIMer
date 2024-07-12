@@ -3,33 +3,34 @@
 #ifndef HASH_H
 #define HASH_H
 
-#include "params.h"
-#include "common/fips202.h"
-#include <stddef.h>
 #include <stdint.h>
+#include "shake/KeccakHash.h"
+#include "shake/KeccakHashtimes4.h"
 
-static const uint8_t HASH_PREFIX_0 = 0;
-static const uint8_t HASH_PREFIX_1 = 1;
-static const uint8_t HASH_PREFIX_2 = 2;
-static const uint8_t HASH_PREFIX_3 = 3;
-static const uint8_t HASH_PREFIX_4 = 4;
-static const uint8_t HASH_PREFIX_5 = 5;
+static const uint8_t HASH_PREFIX_0    =  0;
+static const uint8_t HASH_PREFIX_1    =  1;
+static const uint8_t HASH_PREFIX_2    =  2;
+static const uint8_t HASH_PREFIX_3    =  3;
+static const uint8_t HASH_PREFIX_4    =  4;
+static const uint8_t HASH_PREFIX_5    =  5;
 
-typedef shake256incctx hash_instance;
+typedef Keccak_HashInstance hash_instance;
 
-#define hash_init AIMER_NAMESPACE(hash_init)
-void hash_init(hash_instance *ctx);
-#define hash_init_prefix AIMER_NAMESPACE(hash_init_prefix)
-void hash_init_prefix(hash_instance *ctx, uint8_t prefix);
-#define hash_update AIMER_NAMESPACE(hash_update)
-void hash_update(hash_instance *ctx, const uint8_t *data, size_t data_len);
-#define hash_final AIMER_NAMESPACE(hash_final)
-void hash_final(hash_instance *ctx);
-#define hash_squeeze AIMER_NAMESPACE(hash_squeeze)
-void hash_squeeze(hash_instance *ctx, uint8_t *buffer, size_t buffer_len);
-#define hash_ctx_clone AIMER_NAMESPACE(hash_ctx_clone)
-void hash_ctx_clone(hash_instance *ctx_dest, const hash_instance *ctx_src);
-#define hash_ctx_release AIMER_NAMESPACE(hash_ctx_release)
-void hash_ctx_release(hash_instance *ctx);
+void hash_init(hash_instance* ctx);
+void hash_init_prefix(hash_instance* ctx, const uint8_t prefix);
+void hash_update(hash_instance* ctx, const uint8_t* data, size_t data_byte_len);
+void hash_final(hash_instance* ctx);
+void hash_squeeze(hash_instance* ctx, uint8_t* buffer, size_t buffer_len);
+
+// x4 parallel hashing
+typedef Keccak_HashInstancetimes4 hash_instance_x4;
+
+void hash_init_x4(hash_instance_x4* ctx);
+void hash_init_prefix_x4(hash_instance_x4* ctx, const uint8_t prefix);
+void hash_update_x4(hash_instance_x4* ctx, const uint8_t** data, size_t data_byte_len);
+void hash_update_x4_1(hash_instance_x4* ctx, const uint8_t *data,
+                      size_t data_byte_len);
+void hash_final_x4(hash_instance_x4* ctx);
+void hash_squeeze_x4(hash_instance_x4* ctx, uint8_t** buffer, size_t buffer_len);
 
 #endif // HASH_H

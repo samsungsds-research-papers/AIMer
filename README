@@ -1,5 +1,5 @@
 The AIMer Signature scheme
-2024-May-27
+2024-Feb-23
 
 This submission package is for the KpqC Competition.
 https://kpqc.or.kr/competition.html
@@ -17,69 +17,55 @@ Package Contents
     ├── Additional_Implementation   Target specific implementation
     │   ├── aarch64                 AArch64(with Crypto Extension)-optimized implementation
     │   │   ├── aimer128f
-    │   │   │   ├── common
+    │   │   │   ├── shake
+    │   │   │   ├── speed
     │   │   │   └── tests
     │   │   ├── aimer128s
-    │   │   │   ├── common
+    │   │   │   ├── shake
+    │   │   │   ├── speed
     │   │   │   └── tests
     │   │   ├── aimer192f
-    │   │   │   ├── common
+    │   │   │   ├── shake
+    │   │   │   ├── speed
     │   │   │   └── tests
     │   │   ├── aimer192s
-    │   │   │   ├── common
+    │   │   │   ├── shake
+    │   │   │   ├── speed
     │   │   │   └── tests
     │   │   ├── aimer256f
-    │   │   │   ├── common
+    │   │   │   ├── shake
+    │   │   │   ├── speed
     │   │   │   └── tests
     │   │   └── aimer256s
-    │   │       ├── common
+    │   │       ├── shake
+    │   │       ├── speed
     │   │       └── tests
-    │   ├── aarch64_shake_opt       AArch64(with Crypto Extension)-optimized with SHAKEx2 implementation
-    │   │   ├── aimer128f
-    │   │   │   ├── common
-    │   │   │   └── tests
-    │   │   ├── aimer128s
-    │   │   │   ├── common
-    │   │   │   └── tests
-    │   │   ├── aimer192f
-    │   │   │   ├── common
-    │   │   │   └── tests
-    │   │   ├── aimer192s
-    │   │   │   ├── common
-    │   │   │   └── tests
-    │   │   ├── aimer256f
-    │   │   │   ├── common
-    │   │   │   └── tests
-    │   │   └── aimer256s
-    │   │       ├── common
-    │   │       └── tests
-    │   └── mem_opt                 Memory-usage-optimized C implementation
+    │   └── avx2                    AVX2-optimized implementation
     │       ├── aimer128f
-    │       │   ├── common
+    │       │   ├── shake
+    │       │   ├── speed
     │       │   └── tests
     │       ├── aimer128s
-    │       │   ├── common
+    │       │   ├── shake
+    │       │   ├── speed
     │       │   └── tests
     │       ├── aimer192f
-    │       │   ├── common
+    │       │   ├── shake
+    │       │   ├── speed
     │       │   └── tests
     │       ├── aimer192s
-    │       │   ├── common
+    │       │   ├── shake
+    │       │   ├── speed
     │       │   └── tests
     │       ├── aimer256f
-    │       │   ├── common
+    │       │   ├── shake
+    │       │   ├── speed
     │       │   └── tests
     │       └── aimer256s
-    │           ├── common
+    │           ├── shake
+    │           ├── speed
     │           └── tests
-    ├── Extra                       License texts and TIMECOP results
-    │   ├── TIMECOP_Result
-    │   │   ├── aimer128f
-    │   │   ├── aimer128s
-    │   │   ├── aimer192f
-    │   │   ├── aimer192s
-    │   │   ├── aimer256f
-    │   │   └── aimer256s
+    ├── Extra                       License texts
     │   ├── LICENSE
     │   └── Open Source Notice.txt
     ├── KAT                         Known Answer Test values for each parameter set
@@ -89,43 +75,55 @@ Package Contents
     │   ├── aimer192s
     │   ├── aimer256f
     │   └── aimer256s
-    ├── Optimized_Implementation    AVX2-optimized implementation
+    ├── Optimized_Implementation    C Optimized implementation
     │   ├── aimer128f
-    │   │   ├── common
+    │   │   ├── shake
+    │   │   ├── speed
     │   │   └── tests
     │   ├── aimer128s
-    │   │   ├── common
+    │   │   ├── shake
+    │   │   ├── speed
     │   │   └── tests
     │   ├── aimer192f
-    │   │   ├── common
+    │   │   ├── shake
+    │   │   ├── speed
     │   │   └── tests
     │   ├── aimer192s
-    │   │   ├── common
+    │   │   ├── shake
+    │   │   ├── speed
     │   │   └── tests
     │   ├── aimer256f
-    │   │   ├── common
+    │   │   ├── shake
+    │   │   ├── speed
     │   │   └── tests
     │   └── aimer256s
-    │       ├── common
+    │       ├── shake
+    │       ├── speed
     │       └── tests
     ├── Reference_Implementation    C Reference implementation
     │   ├── aimer128f
-    │   │   ├── common
+    │   │   ├── shake
+    │   │   ├── speed
     │   │   └── tests
     │   ├── aimer128s
-    │   │   ├── common
+    │   │   ├── shake
+    │   │   ├── speed
     │   │   └── tests
     │   ├── aimer192f
-    │   │   ├── common
+    │   │   ├── shake
+    │   │   ├── speed
     │   │   └── tests
     │   ├── aimer192s
-    │   │   ├── common
+    │   │   ├── shake
+    │   │   ├── speed
     │   │   └── tests
     │   ├── aimer256f
-    │   │   ├── common
+    │   │   ├── shake
+    │   │   ├── speed
     │   │   └── tests
     │   └── aimer256s
-    │       ├── common
+    │       ├── shake
+    │       ├── speed
     │       └── tests
     └── Supporting_Documentation    Documentation with cover sheet
             └── AIMer.pdf

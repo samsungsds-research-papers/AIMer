@@ -8,6 +8,48 @@
 int main()
 {
   int succ = 1, i;
+  GF a, b, c;
+
+  for (i = 0; i < AIM2_NUM_BYTES_FIELD; i++)
+  {
+    ((uint8_t*)a)[i] = i;
+  }
+
+  GF_exp_power_of_2(a, b, aim2_invmer_exponents[0]);
+  GF_transposed_matmul(a, aim2_e1_power_matrix, c);
+  if (memcmp(b, c, sizeof(GF)))
+  {
+    succ = 0;
+    printf("[-] GF_exp_power_of_2 != GF_exp_by_mat for e1\n");
+  }
+
+  GF_exp_power_of_2(a, b, aim2_invmer_exponents[1]);
+  GF_transposed_matmul(a, aim2_e2_power_matrix, c);
+  if (memcmp(b, c, sizeof(GF)))
+  {
+    succ = 0;
+    printf("[-] GF_exp_power_of_2 != GF_exp_by_mat for e2\n");
+  }
+
+  GF_exp(a, b, aim2_exponents[0]);                   // b ^ {2 ^ e - 1} = a
+  GF_mul(a, b, c);                                   // c = a * b
+  GF_exp_power_of_2(b, b, aim2_invmer_exponents[0]); // b = b ^ {2 ^ e}
+
+  if (memcmp(b, c, sizeof(GF)))
+  {
+    succ = 0;
+    printf("[-] aim2_exps[0] does not fit with aim2_invmer_exps[0]\n");
+  }
+
+  GF_exp(a, b, aim2_exponents[1]);                   // b ^ {2 ^ e - 1} = a
+  GF_mul(a, b, c);                                   // c = a * b
+  GF_exp_power_of_2(b, b, aim2_invmer_exponents[1]); // b = b ^ {2 ^ e}
+
+  if (memcmp(b, c, sizeof(GF)))
+  {
+    succ = 0;
+    printf("[-] aim2_exps[1] does not fit with aim2_invmer_exps[1]\n");
+  }
 
   // Inverted order compared to Sage!
   uint8_t pt[32] =
@@ -28,7 +70,7 @@ int main()
 
   uint8_t ct[32] = {0,};
 
-  aim2(ct, pt, iv);
+  aim2(pt, iv, ct);
 
   printf("PLAINTEXT                 : ");
   for (i = (int)sizeof(pt) - 1; i >= 0; i--)
