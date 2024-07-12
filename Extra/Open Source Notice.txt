@@ -1,28 +1,22 @@
 Open Source Notice
 
 
-* PQClean
+* bnpp_rain
 MIT License
-Copyright (c) 2016 Thomas Pornin <pornin@bolet.org>
-Copyright (c) 2020 Bas Westerbaan
-Copyright (c) 2023: Hanno Becker, Vincent Hwang, Matthias J. Kannwischer, Bo-Yin Yang, and Shang-Yi Yang
-
-* SMAUG-T
-MIT License
+Copyright (c) 2022 Graz University of Technology
 
 * CRYPTOGAMS
 3-Clause BSD License
 Copyright (c) 2006-2017, CRYPTOGAMS by <appro@openssl.org>
 All rights reserved.
 
-* NIST-developed software
-NIST Software License
+* NIST developed software
+NIST Public Service License
 
 --------------------------------------------------------------------
 License Text
 
 MIT License
-
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
@@ -77,7 +71,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE."
 
-NIST Software License
+
 
 "NIST-developed software is provided by NIST as a public service. You may use, copy and distribute copies of the software in any medium, provided that you keep intact this entire notice. You may improve, modify and create derivative works of the software or any portion of the software, and you may copy and distribute such modifications or works. Modified works should carry a notice stating that you changed the software and should note the date and nature of any such change. Please explicitly acknowledge the National Institute of Standards and Technology as the source of the software.
 
