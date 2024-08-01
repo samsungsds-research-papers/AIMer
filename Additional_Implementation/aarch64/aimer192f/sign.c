@@ -435,6 +435,7 @@ int crypto_sign_verify(const uint8_t *sig, size_t siglen,
 
     GF alpha_v = {0,};
     GF alpha_v_shares[2][AIMER_N], alpha_v_shares_hi[2][AIMER_N];
+    GF_set0(alpha_v_shares[1][i_bar]);
     memset(alpha_v_shares_hi, 0, sizeof(alpha_v_shares_hi));
 
     for (size_t party = 0; party < AIMER_N; party++)
@@ -565,7 +566,7 @@ int crypto_sign_open(uint8_t *m, size_t *mlen,
     return -1;
   }
 
-  memcpy(m, message, message_len);
+  memmove(m, message, message_len);
   *mlen = message_len;
 
   return 0;

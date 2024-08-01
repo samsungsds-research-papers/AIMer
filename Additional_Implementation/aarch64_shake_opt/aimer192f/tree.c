@@ -6,24 +6,6 @@
 #include <stdint.h>
 #include <string.h>
 
-void expand_seed(uint8_t out[2 * AIMER_SEED_SIZE],
-                 const uint8_t salt[AIMER_SALT_SIZE],
-                 size_t rep_index,
-                 size_t node_index,
-                 const uint8_t seed[AIMER_SEED_SIZE])
-{
-  hash_instance ctx;
-
-  hash_init_prefix(&ctx, HASH_PREFIX_4);
-  hash_update(&ctx, salt, AIMER_SALT_SIZE);
-  hash_update(&ctx, (const uint8_t*)&rep_index, sizeof(uint8_t));
-  hash_update(&ctx, (const uint8_t*)&node_index, sizeof(uint8_t));
-  hash_update(&ctx, seed, AIMER_SEED_SIZE);
-  hash_final(&ctx);
-  hash_squeeze(&ctx, out, 2 * AIMER_SEED_SIZE);
-  hash_ctx_release(&ctx);
-}
-
 //  Example of tree for [N = 8]
 //  x
 //  d = 0: 1
@@ -87,6 +69,7 @@ void expand_trees(uint8_t nodes[AIMER_T][2 * AIMER_N - 1][AIMER_SEED_SIZE],
         hash_update(&ctx1, bufs[0], AIMER_SEED_SIZE + 2);
         hash_final(&ctx1);
         hash_squeeze(&ctx1, nodes[rep][2 * index - 1], AIMER_SEED_SIZE << 1);
+        hash_ctx_release(&ctx1);
       }
     }
     // depth = 2;
@@ -115,6 +98,7 @@ void expand_trees(uint8_t nodes[AIMER_T][2 * AIMER_N - 1][AIMER_SEED_SIZE],
       }
     }
   }
+  hash_ctx_release(&ctx1_);
 }
 
 void reveal_all_but(uint8_t reveal_path[AIMER_LOGN][AIMER_SEED_SIZE],
@@ -138,6 +122,7 @@ void reconstruct_tree(uint8_t nodes[2 * AIMER_N - 2][AIMER_SEED_SIZE],
                       size_t rep_index,
                       size_t cover_index)
 {
+  size_t index, depth, path;
   uint8_t bufs[2][AIMER_SEED_SIZE + 2];
   const uint8_t* in_ptrs[2] = {bufs[0], bufs[1]};
   uint8_t* out_ptrs[2];
@@ -146,18 +131,28 @@ void reconstruct_tree(uint8_t nodes[2 * AIMER_N - 2][AIMER_SEED_SIZE],
   hash_init_prefix_x2(&ctx_, HASH_PREFIX_4);
   hash_update_x2_1(&ctx_, salt, AIMER_SALT_SIZE);
 
-  size_t index, depth, path;
+  // depth = 1
+  hash_instance ctx1;
+  uint8_t buffer[AIMER_SALT_SIZE + AIMER_SEED_SIZE + 3];
 
-  // d = 1
+  hash_init(&ctx1);
   path = ((cover_index + AIMER_N) >> (AIMER_LOGN - 1)) ^ 1;
 
-  expand_seed(nodes[(path << 1) - 2], salt, rep_index, path,
-              reveal_path[AIMER_LOGN - 1]);
+  buffer[0] = HASH_PREFIX_4;
+  memcpy(buffer + 1, salt, AIMER_SALT_SIZE);
+  buffer[AIMER_SALT_SIZE + 1] = rep_index;
+  buffer[AIMER_SALT_SIZE + 2] = path;
+  memcpy(buffer + AIMER_SALT_SIZE + 3, reveal_path[AIMER_LOGN - 1],
+         AIMER_SEED_SIZE);
+
+  hash_update(&ctx1, buffer, AIMER_SALT_SIZE+ AIMER_SEED_SIZE + 3);
+  hash_final(&ctx1);
+  hash_squeeze(&ctx1, nodes[(path << 1) - 2], 2 * AIMER_SEED_SIZE);
+  hash_ctx_release(&ctx1);
 
   for (depth = 2; depth < AIMER_LOGN; depth++)
   {
     path = ((cover_index + AIMER_N) >> (AIMER_LOGN - depth)) ^ 1;
-
     memcpy(nodes[path - 2], reveal_path[AIMER_LOGN - depth], AIMER_SEED_SIZE);
 
     for (index = (1U << depth); index < (2U << depth); index += 2)

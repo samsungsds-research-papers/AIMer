@@ -571,7 +571,7 @@ int crypto_sign_open(uint8_t *m, size_t *mlen,
     return -1;
   }
 
-  memcpy(m, message, message_len);
+  memmove(m, message, message_len);
   *mlen = message_len;
 
   return 0;

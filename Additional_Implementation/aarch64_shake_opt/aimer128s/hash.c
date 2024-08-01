@@ -74,9 +74,9 @@ static void add_bytes_x2(uint64x2_t *state_x2, const uint8_t **data,
       bytes_in_lane = size_left;
     }
 
-    memcpy((unsigned char*)&lane_low  + offset_in_lane,
+    memcpy((uint8_t *)&lane_low  + offset_in_lane,
            data[0] + current_data_index, bytes_in_lane);
-    memcpy((unsigned char*)&lane_high + offset_in_lane,
+    memcpy((uint8_t *)&lane_high + offset_in_lane,
            data[1] + current_data_index, bytes_in_lane);
 
     lane_x2 = vcombine_u64(vld1_u64(&lane_low), vld1_u64(&lane_high));
@@ -89,8 +89,8 @@ static void add_bytes_x2(uint64x2_t *state_x2, const uint8_t **data,
 
   while (size_left >= 8)
   {
-    lane_low  = *((uint64_t*)(data[0] + current_data_index));
-    lane_high = *((uint64_t*)(data[1] + current_data_index));
+    memcpy((uint8_t *)&lane_low, data[0] + current_data_index, 8);
+    memcpy((uint8_t *)&lane_high, data[1] + current_data_index, 8);
 
     lane_x2 = vcombine_u64(vld1_u64(&lane_low), vld1_u64(&lane_high));
     state_x2[lane_position] = veorq_u64(state_x2[lane_position], lane_x2);
@@ -105,8 +105,8 @@ static void add_bytes_x2(uint64x2_t *state_x2, const uint8_t **data,
     lane_low  = 0;
     lane_high = 0;
 
-    memcpy((unsigned char*)&lane_low,  data[0] + current_data_index, size_left);
-    memcpy((unsigned char*)&lane_high, data[1] + current_data_index, size_left);
+    memcpy((uint8_t *)&lane_low,  data[0] + current_data_index, size_left);
+    memcpy((uint8_t *)&lane_high, data[1] + current_data_index, size_left);
 
     lane_x2 = vcombine_u64(vld1_u64(&lane_low), vld1_u64(&lane_high));
     state_x2[lane_position] = veorq_u64(state_x2[lane_position], lane_x2);
@@ -139,7 +139,9 @@ void hash_update_x2(hash_instance_x2 *ctx, const uint8_t **data,
       partial_block = data_len - i;
 
       if (partial_block + ctx->byte_io_index > SHAKE128_RATE)
+      {
         partial_block = SHAKE128_RATE - ctx->byte_io_index;
+      }
 
       i += partial_block;
 
@@ -209,15 +211,17 @@ static void squeeze_extract_bytes_x2(uint64x2_t *state_x2, uint8_t **data,
     size_t bytes_in_lane = 8 - offset_in_lane;
 
     if (bytes_in_lane > size_left)
+    {
       bytes_in_lane = size_left;
+    }
 
     lane_low_u64  = vgetq_lane_u64(state_x2[lane_position], 0);
     lane_high_u64 = vgetq_lane_u64(state_x2[lane_position], 1);
 
     memcpy(data[0] + current_data_index,
-           ((unsigned char *)&lane_low_u64)  + offset_in_lane, bytes_in_lane);
+           ((uint8_t *)&lane_low_u64)  + offset_in_lane, bytes_in_lane);
     memcpy(data[1] + current_data_index,
-           ((unsigned char *)&lane_high_u64) + offset_in_lane, bytes_in_lane);
+           ((uint8_t *)&lane_high_u64) + offset_in_lane, bytes_in_lane);
 
     size_left -= bytes_in_lane;
     lane_position++;
@@ -242,9 +246,9 @@ static void squeeze_extract_bytes_x2(uint64x2_t *state_x2, uint8_t **data,
     lane_low_u64  = vgetq_lane_u64(state_x2[lane_position], 0);
     lane_high_u64 = vgetq_lane_u64(state_x2[lane_position], 1);
 
-    memcpy(data[0] + current_data_index, ((unsigned char *)&lane_low_u64),
+    memcpy(data[0] + current_data_index, ((uint8_t *)&lane_low_u64),
            size_left);
-    memcpy(data[1] + current_data_index, ((unsigned char *)&lane_high_u64),
+    memcpy(data[1] + current_data_index, ((uint8_t *)&lane_high_u64),
            size_left);
   }
 }
@@ -305,7 +309,9 @@ void hash_squeeze_x2(hash_instance_x2 *ctx, uint8_t **buffer, size_t buffer_len)
       partial_block = buffer_len - i;
 
       if (partial_block + ctx->byte_io_index > SHAKE128_RATE)
+      {
         partial_block = SHAKE128_RATE - ctx->byte_io_index;
+      }
 
       i += partial_block;
 
@@ -322,7 +328,9 @@ void hash_ctx_clone_x2(hash_instance_x2 *ctx_dest,
                        const hash_instance_x2 *ctx_src)
 {
   for (size_t i = 0; i < 25; i++)
+  {
     ctx_dest->state_x2[i] = ctx_src->state_x2[i];
+  }
   ctx_dest->byte_io_index = ctx_src->byte_io_index;
 }
 
